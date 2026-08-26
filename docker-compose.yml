@@ -1,0 +1,81 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: brainwave_db
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-brainwave_bi}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - brainwave_net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  alembic:
+    build: 
+      context: ./backend
+    container_name: brainwave_migrations
+    environment:
+      POSTGRES_SERVER: db
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-brainwave_bi}
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - brainwave_net
+    # O serviço aguarda o banco no nível de aplicação e roda a migração
+    command: sh -c "python wait_for_db.py && sh /app/run_migrations.sh"
+
+  backend:
+    build: 
+      context: ./backend
+    container_name: brainwave_backend
+    restart: always
+    environment:
+      POSTGRES_SERVER: db
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-brainwave_bi}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-""}
+      SECRET_KEY: ${SECRET_KEY:-"fallback_secret_key_for_jwt"}
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      alembic:
+        condition: service_completed_successfully
+    networks:
+      - brainwave_net
+    command: sh -c "python wait_for_db.py && uvicorn app.main:app --host 0.0.0.0 --port 8000"
+
+  frontend:
+    build: 
+      context: ./frontend
+    container_name: brainwave_frontend
+    restart: always
+    ports:
+      - "8080:80"
+    depends_on:
+      - backend
+    networks:
+      - brainwave_net
+
+volumes:
+  postgres_data:
+
+networks:
+  brainwave_net:
+    driver: bridge

@@ -1,0 +1,12 @@
+fastapi
+uvicorn
+sqlalchemy
+psycopg[binary]
+python-dotenv
+pydantic-settings>=2.0.0
+alembic
+tenacity
+loguru
+pytest
+httpx
+python-multipart
