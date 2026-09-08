@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from loguru import logger
 import sys
 
-from app.api import alerts, analytics, auth, chat, datasets, documents, query, reports
+from app.api import alerts, analytics, auth, chat, datasets, documents, query, reports, system
 from app.core.config import settings
 from app.db.base import Base
 from app.db.seed import seed_analytics_setup, seed_sales_dataset, seed_usuarios
@@ -41,6 +41,7 @@ def root():
 
 
 app.include_router(auth.router, prefix=settings.API_V1_STR)
+app.include_router(system.router, prefix=settings.API_V1_STR)
 app.include_router(chat.router, prefix=settings.API_V1_STR)
 app.include_router(datasets.router, prefix=settings.API_V1_STR)
 app.include_router(documents.router, prefix=settings.API_V1_STR)

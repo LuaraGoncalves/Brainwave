@@ -2,13 +2,21 @@
 import { computed, onMounted, ref } from 'vue'
 import {
   askQuestion,
+  createReport,
   exportUrl,
+  getOverview,
   getSalesSample,
   listDatasets,
+  listAlerts,
+  listReports,
   loginDemo,
+  uploadSalesCsv,
+  type AlertInfo,
   type AnalysisResponse,
   type ChartPayload,
   type DatasetInfo,
+  type OverviewResponse,
+  type ReportInfo,
 } from '../services/api'
 
 type ChatMessage = {
@@ -24,6 +32,11 @@ const error = ref('')
 const chatId = ref<number | null>(null)
 const datasets = ref<DatasetInfo[]>([])
 const sampleRows = ref<Record<string, string | number>[]>([])
+const overview = ref<OverviewResponse | null>(null)
+const alerts = ref<AlertInfo[]>([])
+const reports = ref<ReportInfo[]>([])
+const uploadStatus = ref('')
+const isUploading = ref(false)
 
 const chatHistory = ref<ChatMessage[]>([
   {
@@ -37,28 +50,22 @@ const latestAnalysis = computed(() => {
   return [...chatHistory.value].reverse().find((msg) => msg.analysis)?.analysis
 })
 
+const dashboardMetrics = computed(() => {
+  if (overview.value?.metrics.length) return overview.value.metrics
+  return [
+    { label: 'Receita total', value: '--', helper: 'Aguardando API' },
+    { label: 'Pedidos', value: '--', helper: 'Aguardando API' },
+    { label: 'Ticket medio', value: '--', helper: 'Aguardando API' },
+    { label: 'Regiao lider', value: '--', helper: 'Aguardando API' },
+  ]
+})
+
 const totalRevenue = computed(() => {
   return sampleRows.value.reduce((sum, row) => sum + Number(row.revenue || 0), 0)
 })
 
-const totalOrders = computed(() => sampleRows.value.length)
-
-const topRegion = computed(() => {
-  const totals = new Map<string, number>()
-  sampleRows.value.forEach((row) => {
-    const region = String(row.region || 'N/A')
-    totals.set(region, (totals.get(region) || 0) + Number(row.revenue || 0))
-  })
-  return [...totals.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || '--'
-})
-
-const topProduct = computed(() => {
-  const totals = new Map<string, number>()
-  sampleRows.value.forEach((row) => {
-    const product = String(row.product || 'N/A')
-    totals.set(product, (totals.get(product) || 0) + Number(row.revenue || 0))
-  })
-  return [...totals.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || '--'
+const totalRevenueLabel = computed(() => {
+  return String(overview.value?.metrics[0]?.value || formatCurrency(totalRevenue.value))
 })
 
 const sampleTrend = computed(() => {
@@ -95,19 +102,29 @@ function formatCurrency(value: number) {
   }).format(value)
 }
 
-function formatCompact(value: number) {
-  return new Intl.NumberFormat('pt-BR', {
-    notation: 'compact',
-    maximumFractionDigits: 1,
-  }).format(value)
-}
-
 async function bootstrap() {
   try {
     await loginDemo()
-    const [datasetList, sample] = await Promise.all([listDatasets(), getSalesSample()])
+    await refreshData()
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : 'Nao foi possivel carregar os dados.'
+  }
+}
+
+async function refreshData() {
+  try {
+    const [datasetList, sample, overviewData, alertList, reportList] = await Promise.all([
+      listDatasets(),
+      getSalesSample(),
+      getOverview(),
+      listAlerts(),
+      listReports(),
+    ])
     datasets.value = datasetList
     sampleRows.value = sample
+    overview.value = overviewData
+    alerts.value = alertList
+    reports.value = reportList
   } catch (err) {
     error.value = err instanceof Error ? err.message : 'Nao foi possivel carregar os dados.'
   }
@@ -156,27 +173,45 @@ function downloadCsv() {
     })
 }
 
+async function generateReport() {
+  try {
+    const report = await createReport(`Resumo executivo ${reports.value.length + 1}`)
+    reports.value = [report, ...reports.value]
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : 'Erro ao gerar relatorio.'
+  }
+}
+
+async function handleUpload(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file) return
+
+  isUploading.value = true
+  uploadStatus.value = ''
+  error.value = ''
+  try {
+    const result = await uploadSalesCsv(file, true)
+    uploadStatus.value = `${result.imported_rows} linhas importadas de ${file.name}`
+    await refreshData()
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : 'Erro ao importar CSV.'
+  } finally {
+    isUploading.value = false
+    input.value = ''
+  }
+}
+
 onMounted(bootstrap)
 </script>
 
 <template>
   <section class="space-y-6">
     <div class="grid grid-cols-2 gap-4 lg:grid-cols-4">
-      <article class="metric-card">
-        <span>Total vendas</span>
-        <strong>{{ formatCompact(totalRevenue) }}</strong>
-      </article>
-      <article class="metric-card">
-        <span>Pedidos</span>
-        <strong>{{ totalOrders }}</strong>
-      </article>
-      <article class="metric-card">
-        <span>Regiao lider</span>
-        <strong>{{ topRegion }}</strong>
-      </article>
-      <article class="metric-card">
-        <span>Produto lider</span>
-        <strong>{{ topProduct }}</strong>
+      <article v-for="metric in dashboardMetrics" :key="metric.label" class="metric-card">
+        <span>{{ metric.label }}</span>
+        <strong>{{ metric.value }}</strong>
+        <small>{{ metric.helper }}</small>
       </article>
     </div>
 
@@ -308,7 +343,14 @@ onMounted(bootstrap)
             <button class="export-btn" @click="downloadCsv">CSV</button>
           </div>
 
-          <div class="relative z-10 mt-5 space-y-4">
+          <label class="upload-box relative z-10 mt-5">
+            <input type="file" accept=".csv,text/csv" @change="handleUpload">
+            <span>{{ isUploading ? 'Importando...' : 'Importar CSV de vendas' }}</span>
+            <small>Colunas: order_date, region, category, product, quantity, unit_price</small>
+          </label>
+          <p v-if="uploadStatus" class="upload-status relative z-10">{{ uploadStatus }}</p>
+
+          <div class="relative z-10 mt-4 space-y-4">
             <article v-for="dataset in datasets" :key="dataset.id" class="dataset-card">
               <div>
                 <h4>{{ dataset.name }}</h4>
@@ -322,10 +364,46 @@ onMounted(bootstrap)
         <section class="glass-card">
           <div class="relative z-10">
             <p class="section-kicker">Retail sales</p>
-            <h3 class="money-value">{{ formatCurrency(totalRevenue) }}</h3>
+            <h3 class="money-value">{{ totalRevenueLabel }}</h3>
             <div class="mini-bars">
               <div v-for="row in sampleRows.slice(0, 5)" :key="`${row.product}-${row.order_date}`" :style="{ height: `${Math.max((Number(row.revenue) / Math.max(totalRevenue, 1)) * 420, 18)}px` }"></div>
             </div>
+          </div>
+        </section>
+
+        <section class="glass-card">
+          <div class="relative z-10 flex items-center justify-between">
+            <div>
+              <p class="section-kicker">Alertas</p>
+              <h3 class="section-title">Monitoramento</h3>
+            </div>
+            <span class="status-dot">{{ alerts.length }}</span>
+          </div>
+          <div class="relative z-10 mt-4 space-y-3">
+            <article v-for="alert in alerts" :key="alert.id" class="alert-card">
+              <div>
+                <strong>{{ alert.title }}</strong>
+                <span>{{ alert.metric }} {{ alert.operator }} {{ alert.threshold }}</span>
+              </div>
+              <em>{{ alert.status }}</em>
+            </article>
+          </div>
+        </section>
+
+        <section class="glass-card">
+          <div class="relative z-10 flex items-center justify-between">
+            <div>
+              <p class="section-kicker">Relatorios</p>
+              <h3 class="section-title">Executivos</h3>
+            </div>
+            <button class="export-btn" @click="generateReport">Gerar</button>
+          </div>
+          <div class="relative z-10 mt-4 space-y-3">
+            <article v-for="report in reports.slice(0, 3)" :key="report.id" class="report-card">
+              <strong>{{ report.title }}</strong>
+              <span>{{ report.summary }}</span>
+            </article>
+            <p v-if="!reports.length" class="empty-state">Nenhum relatorio gerado ainda.</p>
           </div>
         </section>
 
@@ -378,6 +456,14 @@ onMounted(bootstrap)
   font-size: clamp(24px, 4vw, 38px);
   font-weight: 400;
   margin-top: 14px;
+}
+
+.metric-card small {
+  color: #9a927f;
+  display: block;
+  font-size: 11px;
+  line-height: 1.4;
+  margin-top: 10px;
 }
 
 .section-title {
@@ -549,9 +635,89 @@ onMounted(bootstrap)
   padding: 16px;
 }
 
+.upload-box {
+  border: 1px dashed rgba(202, 163, 92, 0.34);
+  border-radius: 8px;
+  cursor: pointer;
+  display: block;
+  padding: 16px;
+  transition: 0.2s;
+}
+
+.upload-box:hover {
+  background: rgba(202, 163, 92, 0.08);
+  border-color: rgba(242, 212, 147, 0.62);
+}
+
+.upload-box input {
+  height: 1px;
+  opacity: 0;
+  position: absolute;
+  width: 1px;
+}
+
+.upload-box span {
+  color: #fff7e6;
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.upload-box small,
+.upload-status {
+  color: #9a927f;
+  display: block;
+  font-size: 12px;
+  line-height: 1.45;
+  margin-top: 6px;
+}
+
+.upload-status {
+  color: #f2d493;
+}
+
 .dataset-card h4 {
   color: #fff7e6;
   font-weight: 600;
+}
+
+.alert-card,
+.report-card {
+  border: 1px solid rgba(202, 163, 92, 0.18);
+  border-radius: 8px;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  padding: 14px;
+}
+
+.alert-card strong,
+.report-card strong {
+  color: #fff7e6;
+  display: block;
+  font-size: 13px;
+}
+
+.alert-card span,
+.report-card span,
+.empty-state {
+  color: #9a927f;
+  display: block;
+  font-size: 12px;
+  line-height: 1.45;
+  margin-top: 4px;
+}
+
+.alert-card em {
+  color: #f2d493;
+  flex: 0 0 auto;
+  font-size: 12px;
+  font-style: normal;
+  text-transform: uppercase;
+}
+
+.report-card {
+  display: block;
 }
 
 .dataset-card p,

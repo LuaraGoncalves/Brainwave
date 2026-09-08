@@ -6,7 +6,7 @@ O Brainwave e um AI Data Analyst Dashboard para portifolio. A ideia e simples: a
 
 - API FastAPI com Swagger em `/docs`.
 - Login com token JWT simples.
-- Dataset real de vendas ficticias salvo no banco.
+- Dataset de vendas carregado por CSV em `backend/app/data/sales.csv`.
 - Perguntas em portugues convertidas para SQL por regras controladas.
 - Bloqueio de comandos perigosos: `DELETE`, `UPDATE`, `DROP`, `ALTER`, `TRUNCATE`, entre outros.
 - Historico de chats e mensagens.
@@ -72,6 +72,9 @@ npm run dev
 ## Principais Endpoints
 
 - `POST /api/v1/auth/login`
+- `GET /api/v1/system/health`
+- `GET /api/v1/system/readiness`
+- `GET /api/v1/system/modules`
 - `POST /api/v1/chat/ask`
 - `GET /api/v1/chat/history`
 - `GET /api/v1/analytics/overview`
@@ -94,7 +97,7 @@ npm run dev
 - Auth: cadastro, login, token e usuario atual.
 - Chat: pergunta em portugues, SQL seguro, resposta, tabela, grafico e historico.
 - Analytics: overview executivo, conexoes de dados e analises salvas.
-- Datasets: catalogo, amostra, upload CSV e exportacao.
+- Datasets: catalogo, amostra, upload CSV com substituicao da base e exportacao.
 - Documents: dicionario de dados, mapa do sistema e preview simples de embedding.
 - Alerts: regras simples de monitoramento para receita e pedidos.
 - Reports: geracao, listagem, detalhe e exportacao CSV de relatorios.
@@ -102,7 +105,6 @@ npm run dev
 
 ## Roadmap
 
-- Adicionar upload visual de CSV no frontend.
 - Trocar o tradutor por regras por Text-to-SQL com LLM, mantendo o validador de SQL seguro.
 - Adicionar permissao por usuario e datasets privados.
 - Gerar relatorios PDF.

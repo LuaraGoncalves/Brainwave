@@ -1,0 +1,19 @@
+order_date,region,category,product,quantity,unit_price
+2026-01-05,Sudeste,Software,Assinatura Pro,12,390
+2026-01-11,Sul,Servicos,Consultoria BI,4,1200
+2026-01-19,Nordeste,Hardware,Sensor IoT,18,210
+2026-02-03,Sudeste,Software,Assinatura Pro,15,390
+2026-02-14,Centro-Oeste,Software,Dashboard Plus,8,540
+2026-02-25,Norte,Servicos,Treinamento,5,850
+2026-03-02,Sul,Hardware,Gateway Edge,7,980
+2026-03-09,Sudeste,Servicos,Consultoria BI,6,1200
+2026-03-18,Nordeste,Software,Dashboard Plus,9,540
+2026-04-06,Norte,Hardware,Sensor IoT,21,210
+2026-04-12,Centro-Oeste,Servicos,Treinamento,7,850
+2026-04-21,Sudeste,Software,Assinatura Pro,20,390
+2026-05-04,Sul,Software,Dashboard Plus,13,540
+2026-05-16,Nordeste,Servicos,Consultoria BI,3,1200
+2026-05-26,Sudeste,Hardware,Gateway Edge,10,980
+2026-06-08,Centro-Oeste,Hardware,Sensor IoT,25,210
+2026-06-17,Norte,Software,Assinatura Pro,11,390
+2026-06-24,Sul,Servicos,Consultoria BI,5,1200

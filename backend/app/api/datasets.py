@@ -1,8 +1,6 @@
-import csv
 import io
-from datetime import datetime
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, UploadFile
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
@@ -10,6 +8,7 @@ from app.core.security import get_current_user
 from app.db.session import get_db
 from app.models.document import Dataset, SaleRecord
 from app.models.usuario import Usuario
+from app.services.dataset_service import import_sales_csv
 
 router = APIRouter(prefix="/datasets", tags=["datasets"])
 
@@ -57,48 +56,20 @@ def sales_sample(
 
 @router.post("/sales/upload")
 def upload_sales_csv(
+    replace: bool = True,
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
     current_user: Usuario = Depends(get_current_user),
 ):
     content = file.file.read().decode("utf-8-sig")
-    reader = csv.DictReader(io.StringIO(content))
-    required = {"order_date", "region", "category", "product", "quantity", "unit_price"}
-    if not reader.fieldnames or not required.issubset(set(reader.fieldnames)):
-        raise HTTPException(
-            status_code=400,
-            detail="CSV precisa ter order_date, region, category, product, quantity e unit_price",
-        )
-
-    records = []
-    for row in reader:
-        quantity = int(row["quantity"])
-        unit_price = int(row["unit_price"])
-        records.append(
-            SaleRecord(
-                order_date=datetime.fromisoformat(row["order_date"]),
-                region=row["region"],
-                category=row["category"],
-                product=row["product"],
-                quantity=quantity,
-                unit_price=unit_price,
-                revenue=quantity * unit_price,
-            )
-        )
-
-    db.add_all(records)
-    if db.query(Dataset).filter(Dataset.name == file.filename).first() is None:
-        db.add(
-            Dataset(
-                name=file.filename or "CSV importado",
-                source="upload",
-                table_name="salerecord",
-                description="Dados importados por CSV pelo usuario.",
-                columns=list(required) + ["revenue"],
-            )
-        )
-    db.commit()
-    return {"imported_rows": len(records)}
+    imported_rows = import_sales_csv(
+        db,
+        content,
+        dataset_name=file.filename or "CSV importado",
+        source="upload",
+        replace=replace,
+    )
+    return {"imported_rows": imported_rows, "replace": replace}
 
 
 @router.get("/sales/export")

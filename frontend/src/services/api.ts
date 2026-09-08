@@ -27,10 +27,50 @@ export type DatasetInfo = {
   columns: string[]
 }
 
+export type MetricCard = {
+  label: string
+  value: string | number
+  helper: string
+}
+
+export type SeriesPoint = {
+  label: string
+  value: number
+}
+
+export type OverviewResponse = {
+  metrics: MetricCard[]
+  monthly_revenue: SeriesPoint[]
+  revenue_by_region: SeriesPoint[]
+  revenue_by_category: SeriesPoint[]
+  top_products: SeriesPoint[]
+}
+
+export type AlertInfo = {
+  id: number
+  title: string
+  metric: string
+  operator: string
+  threshold: number
+  current_value: number
+  severity: string
+  status: string
+}
+
+export type ReportInfo = {
+  id: number
+  title: string
+  period: string
+  summary: string
+  payload: OverviewResponse
+}
+
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const token = localStorage.getItem('brainwave_token')
   const headers = new Headers(options.headers)
-  headers.set('Content-Type', 'application/json')
+  if (!(options.body instanceof FormData)) {
+    headers.set('Content-Type', 'application/json')
+  }
   if (token) headers.set('Authorization', `Bearer ${token}`)
 
   const response = await fetch(`${API_URL}${path}`, { ...options, headers })
@@ -63,6 +103,34 @@ export function listDatasets() {
 
 export function getSalesSample() {
   return request<Record<string, string | number>[]>('/datasets/sales/sample')
+}
+
+export function uploadSalesCsv(file: File, replace = true) {
+  const formData = new FormData()
+  formData.append('file', file)
+  return request<{ imported_rows: number; replace: boolean }>(`/datasets/sales/upload?replace=${replace}`, {
+    method: 'POST',
+    body: formData,
+  })
+}
+
+export function getOverview() {
+  return request<OverviewResponse>('/analytics/overview')
+}
+
+export function listAlerts() {
+  return request<AlertInfo[]>('/alerts')
+}
+
+export function listReports() {
+  return request<ReportInfo[]>('/reports')
+}
+
+export function createReport(title = 'Resumo executivo', period = '2026-H1') {
+  return request<ReportInfo>('/reports', {
+    method: 'POST',
+    body: JSON.stringify({ title, period }),
+  })
 }
 
 export function exportUrl() {

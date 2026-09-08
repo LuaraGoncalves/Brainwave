@@ -39,6 +39,16 @@ def test_health_check():
     assert response.json()["status"] == "running"
 
 
+def test_system_health_and_modules():
+    health = client.get("/api/v1/system/health")
+    assert health.status_code == 200
+    assert health.json()["status"] == "ok"
+
+    modules = client.get("/api/v1/system/modules")
+    assert modules.status_code == 200
+    assert len(modules.json()["modules"]) >= 8
+
+
 def test_sql_safety_blocks_writes():
     assert is_safe_select("SELECT product FROM salerecord")
     assert not is_safe_select("DELETE FROM salerecord")
@@ -63,6 +73,25 @@ def test_dataset_sample_has_seeded_sales():
     response = client.get("/api/v1/datasets/sales/sample", headers=auth_headers())
     assert response.status_code == 200
     assert len(response.json()) > 0
+
+
+def test_sales_csv_upload_replaces_dataset_rows():
+    csv_content = (
+        "order_date,region,category,product,quantity,unit_price\n"
+        "2026-07-01,Sudeste,Software,Plano Enterprise,2,5000\n"
+        "2026-07-02,Sul,Servicos,Implantacao,1,3000\n"
+    )
+    response = client.post(
+        "/api/v1/datasets/sales/upload?replace=true",
+        headers=auth_headers(),
+        files={"file": ("sales-upload.csv", csv_content, "text/csv")},
+    )
+    assert response.status_code == 200
+    assert response.json()["imported_rows"] == 2
+
+    sample = client.get("/api/v1/datasets/sales/sample", headers=auth_headers())
+    assert sample.status_code == 200
+    assert len(sample.json()) == 2
 
 
 def test_analytics_overview_returns_business_metrics():
