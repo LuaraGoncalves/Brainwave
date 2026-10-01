@@ -9,6 +9,12 @@ import {
   listDatasets,
   listAlerts,
   listReports,
+  listChatHistory,
+  listChatMessages,
+  saveAnalysis,
+  exportReportUrl,
+  updateAlertStatus,
+  logout,
   loginDemo,
   uploadSalesCsv,
   type AlertInfo,
@@ -35,6 +41,7 @@ const sampleRows = ref<Record<string, string | number>[]>([])
 const overview = ref<OverviewResponse | null>(null)
 const alerts = ref<AlertInfo[]>([])
 const reports = ref<ReportInfo[]>([])
+const savedAnalyses = ref<{ id: number; title: string; question: string }[]>([])
 const uploadStatus = ref('')
 const isUploading = ref(false)
 
@@ -106,6 +113,27 @@ async function bootstrap() {
   try {
     await loginDemo()
     await refreshData()
+    const history = await listChatHistory()
+    const firstChat = history[0]
+    if (firstChat) {
+      chatId.value = firstChat.id
+      const messages = await listChatMessages(firstChat.id)
+      chatHistory.value = messages.map((message, index) => ({
+        id: message.id || index,
+        role: message.role === 'user' ? 'user' : 'ai',
+        text: message.content,
+        analysis: message.chart ? {
+          chat_id: firstChat.id,
+          question: message.content,
+          answer: message.content,
+          sql: message.sql || '',
+          columns: message.result?.[0] ? Object.keys(message.result[0]) : [],
+          rows: message.result || [],
+          chart: message.chart,
+          insights: [],
+        } : undefined,
+      }))
+    }
   } catch (err) {
     error.value = err instanceof Error ? err.message : 'Nao foi possivel carregar os dados.'
   }
@@ -180,6 +208,51 @@ async function generateReport() {
   } catch (err) {
     error.value = err instanceof Error ? err.message : 'Erro ao gerar relatorio.'
   }
+}
+
+async function saveLatestAnalysis() {
+  if (!latestAnalysis.value) return
+  try {
+    const saved = await saveAnalysis({
+      title: latestAnalysis.value.chart?.title || 'Análise salva',
+      question: latestAnalysis.value.question,
+      sql: latestAnalysis.value.sql,
+      chart: latestAnalysis.value.chart,
+      insights: latestAnalysis.value.insights,
+    })
+    savedAnalyses.value = [saved, ...savedAnalyses.value]
+    uploadStatus.value = 'Análise salva com sucesso.'
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : 'Erro ao salvar análise.'
+  }
+}
+
+async function resolveAlert(alert: AlertInfo) {
+  try {
+    const updated = await updateAlertStatus(alert.id, 'resolved')
+    alerts.value = alerts.value.map((item) => item.id === updated.id ? updated : item)
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : 'Erro ao atualizar alerta.'
+  }
+}
+
+function downloadReport(report: ReportInfo) {
+  const token = localStorage.getItem('brainwave_token')
+  fetch(exportReportUrl(report.id), { headers: token ? { Authorization: `Bearer ${token}` } : {} })
+    .then((response) => response.blob())
+    .then((blob) => {
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `brainwave-report-${report.id}.csv`
+      link.click()
+      URL.revokeObjectURL(url)
+    })
+}
+
+function signOut() {
+  logout()
+  window.location.reload()
 }
 
 async function handleUpload(event: Event) {
@@ -266,7 +339,7 @@ onMounted(bootstrap)
               </svg>
             </div>
 
-            <aside class="insight-panel">
+            <aside id="insights" class="insight-panel">
               <p class="section-kicker">Insights</p>
               <ul class="space-y-3">
                 <li v-for="insight in latestAnalysis?.insights || ['Faca uma pergunta para gerar insights.', 'O SQL sera exibido com a tabela e o grafico.', 'Somente consultas SELECT sao permitidas.']" :key="insight">
@@ -276,7 +349,10 @@ onMounted(bootstrap)
             </aside>
           </div>
 
-          <div v-if="latestAnalysis" class="relative z-10 mt-6 grid gap-4 lg:grid-cols-[0.8fr_1.2fr]">
+          <div v-if="latestAnalysis" class="relative z-10 mt-6 flex flex-wrap gap-3">
+            <button class="export-btn" @click="saveLatestAnalysis">Salvar análise</button>
+          </div>
+          <div v-if="latestAnalysis" class="relative z-10 mt-4 grid gap-4 lg:grid-cols-[0.8fr_1.2fr]">
             <div class="sql-box">
               <span>SQL gerado</span>
               <pre>{{ latestAnalysis.sql }}</pre>
@@ -298,13 +374,16 @@ onMounted(bootstrap)
           </div>
         </section>
 
-        <section class="glass-card">
+        <section id="chat" class="glass-card">
           <div class="relative z-10 flex items-center justify-between gap-4">
             <div>
               <p class="section-kicker">Chat analitico</p>
               <h3 class="section-title">Pergunte aos dados</h3>
             </div>
-            <span class="status-dot">Seguro</span>
+            <div class="flex items-center gap-3">
+              <span class="status-dot">Seguro</span>
+              <button class="text-xs text-brain-muted underline" @click="signOut">Sair</button>
+            </div>
           </div>
 
           <div class="relative z-10 mt-5 max-h-72 space-y-4 overflow-y-auto pr-2 custom-scrollbar">
@@ -334,7 +413,7 @@ onMounted(bootstrap)
       </div>
 
       <aside class="space-y-6 xl:col-span-4">
-        <section class="glass-card">
+        <section id="datasets" class="glass-card">
           <div class="relative z-10 flex items-center justify-between">
             <div>
               <p class="section-kicker">Datasets</p>
@@ -385,7 +464,8 @@ onMounted(bootstrap)
                 <strong>{{ alert.title }}</strong>
                 <span>{{ alert.metric }} {{ alert.operator }} {{ alert.threshold }}</span>
               </div>
-              <em>{{ alert.status }}</em>
+              <button v-if="alert.status !== 'resolved'" class="text-xs text-brain-gold underline" @click="resolveAlert(alert)">Resolver</button>
+              <em v-else>{{ alert.status }}</em>
             </article>
           </div>
         </section>
@@ -400,8 +480,11 @@ onMounted(bootstrap)
           </div>
           <div class="relative z-10 mt-4 space-y-3">
             <article v-for="report in reports.slice(0, 3)" :key="report.id" class="report-card">
-              <strong>{{ report.title }}</strong>
-              <span>{{ report.summary }}</span>
+              <div>
+                <strong>{{ report.title }}</strong>
+                <span>{{ report.summary }}</span>
+              </div>
+              <button class="text-xs text-brain-gold underline" @click="downloadReport(report)">Baixar CSV</button>
             </article>
             <p v-if="!reports.length" class="empty-state">Nenhum relatorio gerado ainda.</p>
           </div>

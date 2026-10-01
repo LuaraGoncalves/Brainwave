@@ -65,6 +65,10 @@ export type ReportInfo = {
   payload: OverviewResponse
 }
 
+export type ChatSummary = { id: number; title: string; created_at: string }
+export type MessageInfo = { id: number; role: string; content: string; sql?: string | null; result?: Record<string, string | number>[] | null; chart?: ChartPayload | null; created_at: string }
+export type SavedAnalysisInfo = { id: number; title: string; question: string; sql: string; chart: ChartPayload | null; insights: string[]; created_at: string }
+
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const token = localStorage.getItem('brainwave_token')
   const headers = new Headers(options.headers)
@@ -97,6 +101,14 @@ export function askQuestion(question: string, chatId?: number | null) {
   })
 }
 
+export function listChatHistory() {
+  return request<ChatSummary[]>('/chat/history')
+}
+
+export function listChatMessages(chatId: number) {
+  return request<MessageInfo[]>(`/chat/${chatId}/messages`)
+}
+
 export function listDatasets() {
   return request<DatasetInfo[]>('/datasets')
 }
@@ -126,6 +138,22 @@ export function listReports() {
   return request<ReportInfo[]>('/reports')
 }
 
+export function exportReportUrl(reportId: number) {
+  return `${API_URL}/reports/${reportId}/export`
+}
+
+export function saveAnalysis(payload: { title: string; question: string; sql: string; chart: ChartPayload | null; insights: string[] }) {
+  return request<SavedAnalysisInfo>('/analytics/saved', { method: 'POST', body: JSON.stringify(payload) })
+}
+
+export function listSavedAnalyses() {
+  return request<SavedAnalysisInfo[]>('/analytics/saved')
+}
+
+export function updateAlertStatus(alertId: number, status: string) {
+  return request<AlertInfo>(`/alerts/${alertId}/status`, { method: 'PATCH', body: JSON.stringify({ status }) })
+}
+
 export function createReport(title = 'Resumo executivo', period = '2026-H1') {
   return request<ReportInfo>('/reports', {
     method: 'POST',
@@ -135,4 +163,8 @@ export function createReport(title = 'Resumo executivo', period = '2026-H1') {
 
 export function exportUrl() {
   return `${API_URL}/datasets/sales/export`
+}
+
+export function logout() {
+  localStorage.removeItem('brainwave_token')
 }

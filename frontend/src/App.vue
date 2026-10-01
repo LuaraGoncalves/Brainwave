@@ -10,11 +10,11 @@ import ChatDashboard from './components/ChatDashboard.vue'
         <h1 class="font-display text-2xl uppercase tracking-[0.18em] text-brain-gold">Brainwave BI</h1>
       </div>
       <div class="hidden items-center gap-2 rounded-full border border-brain-line bg-brain-panel px-2 py-2 md:flex">
-        <a href="#" class="nav-pill active">Dashboard</a>
-        <a href="#" class="nav-pill">Datasets</a>
-        <a href="#" class="nav-pill">Insights</a>
+        <a href="#dashboard" class="nav-pill active">Dashboard</a>
+        <a href="#datasets" class="nav-pill">Datasets</a>
+        <a href="#insights" class="nav-pill">Insights</a>
       </div>
-      <button class="btn-primary">Consultar dados</button>
+      <a href="#chat" class="btn-primary">Consultar dados</a>
     </nav>
 
     <main class="mx-auto max-w-[1440px] px-5 pb-10 md:px-10">
@@ -28,7 +28,7 @@ import ChatDashboard from './components/ChatDashboard.vue'
         </p>
       </div>
 
-      <ChatDashboard />
+      <div id="dashboard"><ChatDashboard /></div>
     </main>
   </div>
 </template>
