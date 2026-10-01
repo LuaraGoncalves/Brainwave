@@ -1,14 +1,8 @@
 #!/bin/sh
 set -e
 
-echo "Limpando migrations antigas..."
-rm -rf /app/alembic/versions/*
-
-echo "Gerando nova migration inicial..."
-alembic revision --autogenerate -m "init"
-
-echo "Aplicando migrations..."
-alembic upgrade head
+echo "Garantindo que o schema do banco exista..."
+python -c "from app.db.base import Base; from app.db.session import engine; Base.metadata.create_all(bind=engine)"
 
 echo "Injetando seeds de dados..."
 python -m app.db.seed
