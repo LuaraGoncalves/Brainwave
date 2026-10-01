@@ -1,6 +1,6 @@
 import io
 
-from fastapi import APIRouter, Depends, File, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
@@ -61,7 +61,10 @@ def upload_sales_csv(
     db: Session = Depends(get_db),
     current_user: Usuario = Depends(get_current_user),
 ):
-    content = file.file.read().decode("utf-8-sig")
+    try:
+        content = file.file.read().decode("utf-8-sig")
+    except UnicodeDecodeError as exc:
+        raise HTTPException(status_code=400, detail="O arquivo precisa estar codificado em UTF-8.") from exc
     imported_rows = import_sales_csv(
         db,
         content,

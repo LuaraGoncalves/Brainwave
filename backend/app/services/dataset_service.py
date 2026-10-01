@@ -13,6 +13,8 @@ REQUIRED_SALES_COLUMNS = {"order_date", "region", "category", "product", "quanti
 
 
 def parse_sales_csv(content: str) -> list[SaleRecord]:
+    if not content.strip():
+        raise HTTPException(status_code=400, detail="O arquivo CSV esta vazio.")
     reader = csv.DictReader(io.StringIO(content))
     if not reader.fieldnames or not REQUIRED_SALES_COLUMNS.issubset(set(reader.fieldnames)):
         raise HTTPException(
@@ -21,21 +23,28 @@ def parse_sales_csv(content: str) -> list[SaleRecord]:
         )
 
     records = []
-    for row in reader:
-        quantity = int(row["quantity"])
-        unit_price = int(row["unit_price"])
-        revenue = int(row.get("revenue") or quantity * unit_price)
-        records.append(
-            SaleRecord(
-                order_date=datetime.fromisoformat(row["order_date"]),
-                region=row["region"],
-                category=row["category"],
-                product=row["product"],
-                quantity=quantity,
-                unit_price=unit_price,
-                revenue=revenue,
+    try:
+        for line_number, row in enumerate(reader, start=2):
+            quantity = int(row["quantity"])
+            unit_price = int(row["unit_price"])
+            revenue = int(row.get("revenue") or quantity * unit_price)
+            if quantity < 0 or unit_price < 0 or revenue < 0:
+                raise ValueError("valores negativos")
+            records.append(
+                SaleRecord(
+                    order_date=datetime.fromisoformat(row["order_date"]),
+                    region=row["region"].strip(),
+                    category=row["category"].strip(),
+                    product=row["product"].strip(),
+                    quantity=quantity,
+                    unit_price=unit_price,
+                    revenue=revenue,
+                )
             )
-        )
+    except (TypeError, ValueError, KeyError) as exc:
+        raise HTTPException(status_code=400, detail=f"CSV invalido na linha {line_number}: verifique datas e valores numericos.") from exc
+    if not records:
+        raise HTTPException(status_code=400, detail="O CSV nao possui linhas de vendas.")
     return records
 
 
